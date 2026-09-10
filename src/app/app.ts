@@ -112,7 +112,11 @@ export class App {
   private async extractPdfText(file: File): Promise<string> {
     const pdf = await getDocument({ data: await file.arrayBuffer() }).promise;
     const pages: string[] = [];
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const firstResultPage = 5;
+    if (pdf.numPages < firstResultPage) {
+      throw new Error('PDF does not contain a result page');
+    }
+    for (let pageNumber = firstResultPage; pageNumber <= pdf.numPages; pageNumber++) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
       pages.push(content.items.map((item) => ('str' in item ? item.str : '')).join(' '));
@@ -121,15 +125,18 @@ export class App {
   }
 
   private parseReport(text: string): ParsedReport {
-    const firstRecordIndex = text.search(/\b[A-Z]{1,6}[-/]\d{4,}\b/);
-    const subjects = this.parseSubjects(firstRecordIndex >= 0 ? text.slice(0, firstRecordIndex) : text);
+    const normalizedText = text.replace(/\s+/g, ' ').trim();
+    const recordIdentifier = '[A-Z]{1,8}[-/][A-Z0-9-]{3,}|[A-Z]{1,3}\\d{7,}|\\d{8,}';
+    const firstRecordIndex = normalizedText.search(new RegExp(`\\b(?:${recordIdentifier})\\b`, 'i'));
+    const subjects = this.parseSubjects(firstRecordIndex >= 0 ? normalizedText.slice(0, firstRecordIndex) : normalizedText);
     const results: StudentResult[] = [];
     if (!subjects.length) return { subjects, results };
 
-    const marksPattern = `(\\d{1,3}\\s+){${subjects.length - 1}}\\d{1,3}`;
-    const recordPattern = new RegExp(`\\b([A-Z]{1,6}[-/]\\d{4,})\\b\\s+([A-Za-z][A-Za-z .'-]*?)\\s+(${marksPattern})(?=\\s|$)`, 'g');
+    const mark = '\\d{1,3}(?:\\.\\d+)?';
+    const marksPattern = `(${mark}\\s+){${subjects.length - 1}}${mark}`;
+    const recordPattern = new RegExp(`\\b(${recordIdentifier})\\b\\s+([A-Za-z][A-Za-z .'-]*?)\\s+(${marksPattern})(?=\\s|$)`, 'gi');
     let match: RegExpExecArray | null;
-    while ((match = recordPattern.exec(text)) !== null) {
+    while ((match = recordPattern.exec(normalizedText)) !== null) {
       const marks = match[3].trim().split(/\s+/).map(Number);
       if (marks.every((mark) => mark >= 0 && mark <= 100)) {
         const subjectMarks = Object.fromEntries(subjects.map((subject, index) => [subject.code, marks[index]]));

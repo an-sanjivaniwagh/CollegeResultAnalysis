@@ -39,4 +39,14 @@ describe('App', () => {
     ]);
     expect(report.results[0].marks).toEqual({ MATH101: 82, SCI102: 78, ENG103: 88 });
   });
+
+  it('should extract records with numeric PRNs', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance as unknown as {
+      parseReport: (text: string) => { results: { prn: string }[] };
+    };
+    const report = app.parseReport('MATH101 Mathematics SCI102 Science PRN Name 2024012345 Aarav Joshi 82 78');
+
+    expect(report.results[0].prn).toBe('2024012345');
+  });
 });
